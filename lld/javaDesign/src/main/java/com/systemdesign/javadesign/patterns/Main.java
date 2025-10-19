@@ -21,6 +21,7 @@ public class Main {
 //        List<Integer> list  = new ArrayList();
     	
     	SingletonPattern singletonPattern = SingletonPattern.getInstance();
+    	
     	try {
 			singletonPattern.clone();
 		} catch (CloneNotSupportedException e) {
