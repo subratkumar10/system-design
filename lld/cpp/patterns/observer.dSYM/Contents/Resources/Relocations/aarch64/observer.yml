@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/subrprad/repo-dev/system-design/lld/cpp/patterns/observer'
+relocations:     []
+...

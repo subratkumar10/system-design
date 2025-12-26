@@ -1,0 +1,13 @@
+
+
+go to code -> settings -> setting -> search code-runner -> 
+
+Code-runner: Executor Map
+Set the executor of each language.
+
+edit settings.json (~/Library/Application Support/Code/User/settings.json) 
+
+change this section:     "cpp": "cd $dir && /usr/bin/clang++ -std=c++14 $fileName -o $fileNameWithoutExt && $dir/$fileNameWithoutExt",
+
+
+

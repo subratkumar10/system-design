@@ -1,0 +1,73 @@
+
+
+std::scoped_lock lock(locks[a], locks[b]);
+
+Why scoped_lock is best?
+
+It locks both mutexes in a deadlock-free manner.
+
+Order doesn't matter.
+
+Ensures automatic unlock.
+
+✅ OPTION 2: Use lock_guard but with manual order
+
+You can still use lock_guard, but locking must be done in the right order:
+
+bool transfer(int account1, int account2, long long money) {
+    if (account1 > initialBalance.size() || account2 > initialBalance.size())
+        return false;
+
+    int a = account1 - 1;
+    int b = account2 - 1;
+
+    if (a == b) return true;
+
+    if (a < b) {
+        std::lock_guard<std::mutex> lock1(locks[a]);
+        std::lock_guard<std::mutex> lock2(locks[b]);
+        
+        if (initialBalance[a] < money)
+            return false;
+
+        initialBalance[a] -= money;
+        initialBalance[b] += money;
+
+        return true;
+    } else {
+        std::lock_guard<std::mutex> lock1(locks[b]);
+        std::lock_guard<std::mutex> lock2(locks[a]);
+
+        if (initialBalance[b] < money)  // careful
+            return false;
+
+        initialBalance[a] -= money;
+        initialBalance[b] += money;
+
+        return true;
+    }
+}
+
+Downsides:
+
+More code.
+
+Easy to make mistakes in branches.
+
+Must ensure same lock order everywhere.
+
+❌ WRONG WAY: lock_guard for each mutex independently without ordering
+std::lock_guard g1(locks[a]);
+std::lock_guard g2(locks[b]);
+
+
+This is unsafe because two threads may lock in reverse order → deadlock.
+
+🎯 Final Recommendation
+
+Use this one-line solution:
+
+std::scoped_lock lock(locks[a], locks[b]);
+
+
+It handles ordering safely and is the cleanest multi-lock solution.
