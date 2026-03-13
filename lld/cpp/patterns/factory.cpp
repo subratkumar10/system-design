@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 
+
 class Vehicle {
 public:
     virtual void info() = 0; // pure virtual function

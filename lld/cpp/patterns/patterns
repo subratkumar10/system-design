@@ -1,0 +1,475 @@
+Here are practical design patterns you can use in a movie booking system, plus small C++ examples to illustrate key ones. 
+
+Where patterns fit in a movie booking system 
+
+    Creational 
+        Factory/Abstract Factory: create payment providers (Stripe, PayPal), ticket types (adult, child, VIP), notification senders (email, SMS).
+        Builder: assemble a Booking with selected showtime, seats, pricing, and applied promotions.
+        Prototype: clone seat maps or pricing templates per auditorium/show.
+         
+
+    Structural 
+        Facade: a BookingService that exposes simple APIs (search, lock seats, pay, issue ticket) hiding complex subsystems (inventory, payments, notifications).
+        Adapter: unify multiple payment SDKs, SMS/email APIs, or third-party loyalty systems.
+        Bridge: separate UI actions (web/mobile) from underlying operations; or separate “content” (movie/show) from “presentation” (region-specific formats).
+        Composite: represent seat maps (sections/rows/seats) or bundles (ticket + snack combo).
+        Decorator: add features to a ticket (3D glasses, lounge access) or add cross-cutting behavior (logging, rate limiting) around services.
+        Proxy: caching show listings, lazy-loading movie details, or access-control to admin APIs.
+        Flyweight: share intrinsic seat data (seat type, price tier) across many seats to save memory.
+         
+
+    Behavioral 
+        Strategy: pricing strategies (peak/off-peak, loyalty discounts), seat ranking, payment methods.
+        State: booking lifecycle (Selecting -> Reserved -> Paid -> Cancelled/Expired).
+        Observer: notify users on status changes (reservation expiry, payment success), notify inventory for updates.
+        Command: encapsulate actions (ReserveSeat, Pay, Cancel) for audit/undo/retry.
+        Chain of Responsibility: request validation (age rating, seating constraints, payment checks) or promotion eligibility.
+        Mediator: coordinate UI widgets (date picker, auditorium, seat grid).
+        Template Method: checkout flow with overridable hooks per region/brand.
+        Memento: restore a cart/session after refresh or reconnection.
+        Iterator: traverse seats/rows uniformly.
+         
+     
+
+Minimal C++ examples (modern C++17) 
+
+     Strategy: payment methods
+     
+
+cpp
+ 
+     
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+#include <iostream>
+#include <memory>
+#include <string>
+
+struct PaymentContext {
+  int bookingId{};
+  double amount{};
+  std::string currency{"USD"};
+};
+
+struct PaymentStrategy {
+  virtual ~PaymentStrategy() = default;
+  virtual bool pay(const PaymentContext& ctx) = 0;
+};
+
+struct CardPayment : PaymentStrategy {
+  bool pay(const PaymentContext& ctx) override {
+    std::cout << "Charging card " << ctx.amount << " " << ctx.currency
+              << " for booking " << ctx.bookingId << "\n";
+    return true;
+  }
+};
+
+struct WalletPayment : PaymentStrategy {
+  bool pay(const PaymentContext& ctx) override {
+    std::cout << "Charging wallet " << ctx.amount << " for booking "
+              << ctx.bookingId << "\n";
+    return true;
+  }
+};
+
+struct Checkout {
+  std::unique_ptr<PaymentStrategy> pay_;
+  explicit Checkout(std::unique_ptr<PaymentStrategy> p) : pay_(std::move(p)) {}
+  bool confirm(int bookingId, double amount) {
+    return pay_->pay(PaymentContext{bookingId, amount, "USD"});
+  }
+};
+ 
+ 
+
+     State: booking lifecycle
+     
+
+cpp
+ 
+     
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+#include <iostream>
+#include <memory>
+#include <string>
+
+struct Booking; // fwd
+
+struct BookingState {
+  virtual ~BookingState() = default;
+  virtual void reserve(Booking&) { std::cout << "Invalid transition\n"; }
+  virtual void pay(Booking&)     { std::cout << "Invalid transition\n"; }
+  virtual void cancel(Booking&)  { std::cout << "Invalid transition\n"; }
+  virtual const char* name() const = 0;
+};
+
+struct Booking {
+  std::unique_ptr<BookingState> state;
+  explicit Booking(std::unique_ptr<BookingState> s) : state(std::move(s)) {}
+  void set(std::unique_ptr<BookingState> s) { state = std::move(s); }
+  void reserve() { state->reserve(*this); }
+  void pay()     { state->pay(*this); }
+  void cancel()  { state->cancel(*this); }
+  void print()   { std::cout << "State: " << state->name() << "\n"; }
+};
+
+struct Selecting : BookingState {
+  const char* name() const override { return "Selecting"; }
+  void reserve(Booking& b) override;
+};
+struct Reserved : BookingState {
+  const char* name() const override { return "Reserved"; }
+  void pay(Booking& b) override;
+  void cancel(Booking& b) override;
+};
+struct Paid : BookingState {
+  const char* name() const override { return "Paid"; }
+};
+struct Cancelled : BookingState {
+  const char* name() const override { return "Cancelled"; }
+};
+
+void Selecting::reserve(Booking& b) { std::cout << "Seats locked.\n"; b.set(std::make_unique<Reserved>()); }
+void Reserved::pay(Booking& b)      { std::cout << "Payment successful.\n"; b.set(std::make_unique<Paid>()); }
+void Reserved::cancel(Booking& b)   { std::cout << "Reservation cancelled.\n"; b.set(std::make_unique<Cancelled>()); }
+ 
+ 
+
+     Observer: notifications
+     
+
+cpp
+ 
+     
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+⌄
+#include <functional>
+#include <iostream>
+#include <vector>
+
+class Notifier {
+  std::vector<std::function<void(const std::string&)>> subs_;
+public:
+  void subscribe(std::function<void(const std::string&)> fn) { subs_.push_back(std::move(fn)); }
+  void emit(const std::string& msg) { for (auto& s : subs_) s(msg); }
+};
+
+// Usage:
+// Notifier n;
+// n.subscribe([](auto& m){ std::cout << "Email: " << m << "\n"; });
+// n.subscribe([](auto& m){ std::cout << "SMS: " << m << "\n"; });
+// n.emit("Your booking is confirmed.");
+ 
+ 
+
+     Facade: booking service
+     
+
+cpp
+ 
+     
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+#include <iostream>
+#include <string>
+#include <vector>
+
+struct Inventory {
+  bool lockSeats(int showId, const std::vector<int>& seats) {
+    std::cout << "Locked seats for show " << showId << "\n"; return true;
+  }
+};
+struct Payments {
+  bool charge(double amount) { std::cout << "Charged " << amount << "\n"; return true; }
+};
+struct Tickets {
+  std::string issue(int bookingId) { return "TIX-" + std::to_string(bookingId); }
+};
+
+struct BookingFacade {
+  Inventory inv; Payments pay; Tickets tix;
+  bool book(int showId, const std::vector<int>& seats, double amount, int bookingId) {
+    if (!inv.lockSeats(showId, seats)) return false;
+    if (!pay.charge(amount)) return false;
+    std::cout << "Ticket: " << tix.issue(bookingId) << "\n";
+    return true;
+  }
+};
+ 
+ 
+
+     Flyweight: seat types shared across seats
+     
+
+cpp
+ 
+     
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+⌄
+⌄
+⌄
+⌄
+#include <iostream>
+#include <map>
+#include <memory>
+#include <string>
+
+struct SeatType {
+  std::string name; double basePrice;
+  SeatType(std::string n, double p) : name(std::move(n)), basePrice(p) {}
+};
+struct SeatTypeFactory {
+  std::map<std::string, std::shared_ptr<SeatType>> pool;
+  std::shared_ptr<SeatType> get(const std::string& key, double price) {
+    auto it = pool.find(key);
+    if (it != pool.end()) return it->second;
+    auto p = std::make_shared<SeatType>(key, price);
+    pool[key] = p; return p;
+  }
+};
+struct Seat {
+  int row, col; std::shared_ptr<SeatType> type; // shared intrinsic data
+  double dynamicAdj; // extrinsic: show-specific adjustment
+  double price() const { return type->basePrice + dynamicAdj; }
+};
+ 
+ 
+
+Putting it together (mini demo) 
+cpp
+ 
+     
+ 
+ 
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+⌄
+int main() {
+  // Strategy (payments)
+  Checkout c1(std::make_unique<CardPayment>());
+  c1.confirm(101, 15.0);
+
+  // State (booking)
+  Booking b(std::make_unique<Select•ing>());
+  b.print(); b.reserve(); b.print(); b.pay(); b.print();
+
+  // Observer (notify)
+  Notifier n;
+  n.subscribe([](auto& m){ std::cout << "Email: " << m << "\n"; });
+  n.subscribe([](auto& m){ std::cout << "SMS: " << m << "\n"; });
+  n.emit("Your booking is confirmed.");
+
+  // Facade (book flow)
+  BookingFacade svc;
+  svc.book(55, {10,11,12}, 30.0, 2024);
+
+  // Flyweight (seat types)
+  SeatTypeFactory f;
+  auto vip = f.get("VIP", 12.0);
+  Seat s{5, 8, vip, 3.0};
+  std::cout << "Seat price: " << s.price() << "\n";
+}
+ 
+ 
+
+Notes for enterprise environments 
+
+    Payments and PII: enforce PCI-DSS, tokenize card data, don’t log sensitive fields, and segregate secrets. Verify any third-party payment or messaging SDK aligns with Oracle security and compliance guidelines before use.
+    Concurrency: seat locking should be atomic with short expiration; consider optimistic locking or distributed locks if horizontally scaled.
+    Idempotency: make reserve/pay/cancel idempotent with request IDs to avoid double charges.
+    Observability: use decorators or proxies for logging/metrics/circuit breaking around external calls.
+    Configurability: use factories and strategy to switch providers and pricing rules per region or tenant without code changes.
+     
+
+If you want, I can expand any of the snippets into a fuller, compilable example for your exact use case (e.g., full seat-inventory with expiration and retries). 

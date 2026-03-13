@@ -1,0 +1,116 @@
+Let’s do the Decorator Pattern – Car example in C++, clean and interview-ready.
+
+Problem Recap 🚗
+
+You want to:
+
+Create a basic car
+
+Add optional features (GPS, Sunroof, Music System)
+
+Combine features at runtime
+
+Avoid subclass explosion
+
+👉 Decorator Pattern fits perfectly
+
+Step-by-Step C++ Implementation
+1️⃣ Component (Abstract Base Class)
+#include <iostream>
+#include <string>
+
+using namespace std;
+
+class Car {
+public:
+    virtual string getDescription() = 0;
+    virtual int getCost() = 0;
+    virtual ~Car() {}
+};
+
+2️⃣ Concrete Component (Basic Car)
+class BasicCar : public Car {
+public:
+    string getDescription() override {
+        return "Basic Car";
+    }
+
+    int getCost() override {
+        return 500000;
+    }
+};
+
+3️⃣ Decorator Base Class
+class CarDecorator : public Car {
+protected:
+    Car* car;
+
+public:
+    CarDecorator(Car* c) : car(c) {}
+
+    virtual ~CarDecorator() {
+        delete car;   // important to avoid memory leak
+    }
+};
+
+4️⃣ Concrete Decorators
+GPS Decorator
+class GPSDecorator : public CarDecorator {
+public:
+    GPSDecorator(Car* c) : CarDecorator(c) {}
+
+    string getDescription() override {
+        return car->getDescription() + ", GPS";
+    }
+
+    int getCost() override {
+        return car->getCost() + 20000;
+    }
+};
+
+Sunroof Decorator
+class SunroofDecorator : public CarDecorator {
+public:
+    SunroofDecorator(Car* c) : CarDecorator(c) {}
+
+    string getDescription() override {
+        return car->getDescription() + ", Sunroof";
+    }
+
+    int getCost() override {
+        return car->getCost() + 50000;
+    }
+};
+
+Music System Decorator
+class MusicSystemDecorator : public CarDecorator {
+public:
+    MusicSystemDecorator(Car* c) : CarDecorator(c) {}
+
+    string getDescription() override {
+        return car->getDescription() + ", Music System";
+    }
+
+    int getCost() override {
+        return car->getCost() + 30000;
+    }
+};
+
+5️⃣ Client Code (Runtime Composition)
+int main() {
+    Car* myCar = new BasicCar();
+
+    myCar = new GPSDecorator(myCar);
+    myCar = new SunroofDecorator(myCar);
+    myCar = new MusicSystemDecorator(myCar);
+
+    cout << myCar->getDescription() << endl;
+    cout << "Total Cost: " << myCar->getCost() << endl;
+
+    delete myCar;  // deletes entire chain
+    return 0;
+}
+
+Output
+Basic Car, GPS, Sunroof, Music System
+Total Cost: 600000
